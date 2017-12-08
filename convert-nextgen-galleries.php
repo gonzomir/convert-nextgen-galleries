@@ -1,18 +1,19 @@
 <?php
 /*
 Plugin Name: Convert NextGEN Galleries to WordPress
-Plugin URI: 
+Plugin URI: https://github.com/stefansenk/convert-nextgen-galleries
 Description: Converts NextGEN galleries to WordPress default galleries.
 Version: 1.0
 Author: Stefan Senk
 Author URI: http://www.senktec.com
 License: GPL2
+Contributors: senktec, gonzomir
 
 
 Copyright 2014  Stefan Senk  (email : info@senktec.com)
 
 This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License, version 2, as 
+it under the terms of the GNU General Public License, version 2, as
 published by the Free Software Foundation.
 
 This program is distributed in the hope that it will be useful,
@@ -31,7 +32,7 @@ function cng_admin_url() {
 
 function cng_get_posts_to_convert_query($post_id = null, $max_number_of_posts = -1) {
 	$args = array(
-		's'           => '[nggallery',
+		's'           => '[ngg',
 		'post_type'   => array( 'post', 'page' ),
 		'post_status' => 'any',
 		'p' => $post_id,
@@ -42,12 +43,15 @@ function cng_get_posts_to_convert_query($post_id = null, $max_number_of_posts = 
 
 function cng_find_gallery_shortcodes($post) {
 	$matches = null;
-	preg_match_all( '/\[nggallery.*?\]/si', $post->post_content, $matches );
+	preg_match_all( '/\[ngg[^\n]+\]/si', $post->post_content, $matches );
 	return $matches[0];
 }
 
 function cng_get_gallery_id_from_shortcode($shortcode) {
 	$atts = shortcode_parse_atts($shortcode);
+	if ( $atts['source'] == 'galleries' ){
+		return intval( $atts['container_ids'] );
+	}
 	return intval( $atts['id'] );
 }
 
@@ -79,7 +83,7 @@ function cng_list_galleries($posts_query) {
 
 function cng_convert_galleries($posts_query) {
 	set_time_limit( 1000 );
-	
+
 	global $wpdb;
 	echo '<h3>Converting galleries in ' . $posts_query->found_posts . ' posts:</h3>';
 
@@ -94,6 +98,8 @@ function cng_convert_galleries($posts_query) {
 			$attachment_ids = array();
 
 			foreach ( $images as $image ) {
+				echo "<p>Processing {$image->filename}.</p>";
+
 				$existing_image_path =  ABSPATH . trailingslashit( $gallery_directory ) . $image->filename;
 				if ( ! file_exists ($existing_image_path) ) {
 					echo "ERROR: File '$existing_image_path' not found.<br>";
@@ -106,8 +112,9 @@ function cng_convert_galleries($posts_query) {
 				$file_array['name'] = $image->filename;
 				$file_array['tmp_name'] = $tmp_image_path;
 
-				if ( ! trim( $image->alttext ) )
+				if ( ! trim( $image->alttext ) ){
 					$image->alttext = $image->filename;
+				}
 
 				$post_data = array(
 					'post_title' => $image->alttext,
@@ -115,7 +122,9 @@ function cng_convert_galleries($posts_query) {
 					'post_excerpt' => $image->description,
 					'menu_order' => $image->sortorder
 				);
+
 				$id = media_handle_sideload( $file_array, $post->ID, null, $post_data );
+
 				if ( is_wp_error($id) ) {
 					echo "ERROR: media_handle_sideload() filed for '$existing_image_path'.<br>";
 					continue;
@@ -123,7 +132,9 @@ function cng_convert_galleries($posts_query) {
 
 				array_push( $attachment_ids, $id );
 				$attachment = get_post( $id );
+
 				update_post_meta( $attachment->ID, '_wp_attachment_image_alt', $image->alttext );
+
 			}
 
 			if ( count( $attachment_ids ) == count( $images ) ) {
@@ -146,7 +157,7 @@ add_filter( 'plugin_action_links', function($links, $file) {
 }, 10, 2 );
 
 add_action('admin_menu', function() {
-	add_options_page( 
+	add_options_page(
 		__( 'Convert NextGEN Galleries', 'convert-nextgen-galleries' ),
 		__( 'Convert NextGEN Galleries', 'convert-nextgen-galleries' ),
 		'manage_options', 'convert-nextgen-galleries.php', function() {
@@ -157,7 +168,7 @@ add_action('admin_menu', function() {
 ?>
 		<div class="wrap">
 			<h2><?php _e( 'Convert NextGEN Galleries to WordPress', 'convert-nextgen-galleries' ); ?></h2>
-			<?php 
+			<?php
 				$post_id = isset($_GET['post']) ? $_GET['post'] : null;
 				$max_num_to_convert = isset($_GET['max_num']) ? $_GET['max_num'] : -1;
 
@@ -175,7 +186,7 @@ add_action('admin_menu', function() {
 			?>
 			<p><a class="" href="<?php echo cng_admin_url() . '&amp;action=list' ?>">List galleries to convert</a></p>
 			<p><a class="button" href="<?php echo cng_admin_url() . '&amp;action=convert' ?>">Convert all galleries</a></p>
-		</div>  
+		</div>
 <?php
 	});
 });
